@@ -1,0 +1,63 @@
+[package]
+name = "rust-embeddings"
+version = "0.1.0"
+edition = "2021"
+authors = ["Your Name <your.email@example.com>"]
+description = "A clean, well-architected Rust library for managing embeddings with design patterns"
+license = "MIT"
+repository = "https://github.com/your-username/rust-embeddings"
+
+[dependencies]
+# Async runtime
+tokio = { version = "1.35", features = ["full"] }
+async-trait = "0.1"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
+
+# Linear algebra for embeddings
+ndarray = "0.15"
+
+# UUID for unique IDs
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Configuration
+config = "0.14"
+
+# Concurrency and Parallelism
+rayon = "1.8"           # Data parallelism
+crossbeam = "0.8"       # Channels and concurrent data structures
+num_cpus = "1.16"       # CPU core detection
+
+[dev-dependencies]
+mockall = "0.12"
+tokio-test = "0.4"
+proptest = "1.4"
+
+[lib]
+name = "rust_embeddings"
+path = "src/lib.rs"
+
+[[example]]
+name = "basic_usage"
+path = "examples/basic_usage.rs"
+
+[[example]]
+name = "custom_storage"
+path = "examples/custom_storage.rs"
+
+[[example]]
+name = "memory_and_concurrency"
+path = "examples/memory_and_concurrency.rs"

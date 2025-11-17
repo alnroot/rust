@@ -1,0 +1,1 @@
+std::result::Result<Vec<entities::Embedding>, EmbeddingError>: FromParallelIterator<Vec<entities::Embedding>>
