@@ -1,22 +1,23 @@
 # Rust Embeddings Library
 
-Una biblioteca Rust bien arquitecturada para gestionar embeddings con clean code y patrones de diseño de software.
+A well-architected Rust library for managing embeddings with clean code and software design patterns. Production-ready with ONNX inference, SQLite persistence, and HNSW approximate nearest neighbor search.
 
-## 🎯 Características
+## Features
 
-- ✅ **Arquitectura Limpia**: Separación de capas (Domain, Application, Infrastructure, Ports)
-- ✅ **Principios SOLID**: Código mantenible y extensible
-- ✅ **Patrones de Diseño**: Repository, Strategy, Factory, Builder, Dependency Injection
-- ✅ **Type-Safe**: Aprovecha el sistema de tipos de Rust
-- ✅ **Async/Await**: Soporte completo para operaciones asíncronas
-- ✅ **Concurrencia y Paralelismo**: Threads, Channels, Rayon, Arc, RwLock
-- ✅ **Gestión de Memoria Explícita**: Stack, Heap, Static memory bien documentados
-- ✅ **Testeable**: Interfaces bien definidas para testing
-- ✅ **Documentado**: Documentación completa con ejemplos
+- **Clean Architecture**: Layered separation (Domain, Application, Infrastructure, Ports)
+- **SOLID Principles**: Maintainable and extensible code
+- **Design Patterns**: Repository, Strategy, Factory, Builder, Dependency Injection
+- **Production Storage**: SQLite with ACID compliance
+- **Fast ANN Search**: HNSW index for O(log n) similarity search
+- **Local Inference**: ONNX Runtime for embedding generation (all-MiniLM-L6-v2)
+- **Concurrency**: Threads, Channels, Rayon, Arc, RwLock
+- **Async/Await**: Full async support with Tokio
+- **Type-Safe**: Leverages Rust's type system
+- **Well Tested**: 32 unit tests passing
 
-## 🏗️ Arquitectura
+## Architecture
 
-La biblioteca sigue el patrón de **Arquitectura Hexagonal** (Ports and Adapters):
+The library follows **Hexagonal Architecture** (Ports and Adapters):
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -29,8 +30,7 @@ La biblioteca sigue el patrón de **Arquitectura Hexagonal** (Ports and Adapters
 ┌────────▼──────┐  ┌────▼──────────┐
 │  Domain Layer │  │  Ports Layer   │
 │  (Entities,   │  │  (Interfaces,  │
-│   Values,     │  │   Abstractions)│
-│   Events)     │  │                │
+│   Values)     │  │   Abstractions)│
 └───────────────┘  └────┬───────────┘
                         │
               ┌─────────▼────────────┐
@@ -39,403 +39,265 @@ La biblioteca sigue el patrón de **Arquitectura Hexagonal** (Ports and Adapters
               └──────────────────────┘
 ```
 
-### Capas
+### Layers
 
-#### 1. **Domain Layer** (`src/domain/`)
-Contiene la lógica de negocio central:
-- **Entities**: `Embedding`, `EmbeddingCollection`, `EmbeddingId`
-- **Value Objects**: `Vector`, `EmbeddingMetadata`
-- **Domain Events**: `EmbeddingCreated`, `EmbeddingUpdated`, etc.
+| Layer | Location | Contents |
+|-------|----------|----------|
+| **Domain** | `src/domain/` | `Embedding`, `Vector`, `EmbeddingMetadata`, `LogEntry` |
+| **Ports** | `src/ports/` | `EmbeddingRepository`, `EmbeddingGenerator`, `VectorStore` |
+| **Application** | `src/application/` | `EmbeddingService`, `LogAnalyzer`, Use Cases |
+| **Infrastructure** | `src/infrastructure/` | `SqliteRepository`, `HnswVectorStore`, `OnnxEmbeddingGenerator` |
 
-#### 2. **Ports Layer** (`src/ports/`)
-Define las abstracciones (traits):
-- `EmbeddingRepository`: Abstracción de persistencia
-- `EmbeddingGenerator`: Estrategia para generar embeddings
-- `VectorStore`: Búsqueda de similitud
-- `EventPublisher`: Publicación de eventos
+## Quick Start
 
-#### 3. **Application Layer** (`src/application/`)
-Orquesta los casos de uso:
-- **Services**: `EmbeddingService` (Facade Pattern)
-- **Use Cases**: `CreateEmbeddingUseCase`, `FindSimilarUseCase`, etc.
+### Installation
 
-#### 4. **Infrastructure Layer** (`src/infrastructure/`)
-Implementaciones concretas:
-- `InMemoryEmbeddingRepository`
-- `RandomEmbeddingGenerator`
-- `InMemoryVectorStore`
-- `InMemoryEventPublisher`
-
-## 🎨 Patrones de Diseño Implementados
-
-### 1. Repository Pattern
-Abstrae el acceso a datos:
-
-```rust
-#[async_trait]
-pub trait EmbeddingRepository: Send + Sync {
-    async fn save(&self, embedding: &Embedding) -> Result<()>;
-    async fn find_by_id(&self, id: &EmbeddingId) -> Result<Option<Embedding>>;
-    // ...
-}
-```
-
-### 2. Strategy Pattern
-Diferentes algoritmos de generación:
-
-```rust
-#[async_trait]
-pub trait EmbeddingGenerator: Send + Sync {
-    async fn generate_from_text(&self, text: &str) -> Result<Embedding>;
-    fn model_name(&self) -> &str;
-    fn dimensions(&self) -> usize;
-}
-```
-
-### 3. Builder Pattern
-Construcción fluida de objetos:
-
-```rust
-let metadata = EmbeddingMetadata::builder()
-    .source("document.txt")
-    .model("text-embedding-ada-002")
-    .tag("production")
-    .property("version", "1.0")
-    .build()?;
-```
-
-### 4. Factory Pattern
-Creación de generadores:
-
-```rust
-let config = GeneratorConfig::builder()
-    .model("random")
-    .dimensions(128)
-    .build()?;
-
-let generator = factory.create(config)?;
-```
-
-### 5. Facade Pattern
-Interfaz unificada:
-
-```rust
-let service = EmbeddingService::new(repository, generator, vector_store);
-let embedding = service.create_from_text("Hello, world!").await?;
-```
-
-### 6. Dependency Injection
-Desacoplamiento mediante traits:
-
-```rust
-pub struct EmbeddingService {
-    repository: Arc<dyn EmbeddingRepository>,
-    generator: Arc<dyn EmbeddingGenerator>,
-    vector_store: Arc<dyn VectorStore>,
-}
-```
-
-## 🚀 Uso Rápido
-
-### Instalación
-
-Añade a tu `Cargo.toml`:
+Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
 rust-embeddings = "0.1.0"
 ```
 
-### Ejemplo Básico
+### Basic Example
 
 ```rust
 use std::sync::Arc;
 use rust_embeddings::prelude::*;
 use rust_embeddings::infrastructure::*;
-use rust_embeddings::ports::*;
+use rust_embeddings::ports::SearchParams;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Configurar componentes
-    let repository = Arc::new(InMemoryEmbeddingRepository::new());
-    let generator = Arc::new(RandomEmbeddingGenerator::new(
-        "model-v1".to_string(),
-        128,
-    ));
-    let vector_store = Arc::new(InMemoryVectorStore::new_cosine());
-
-    // Crear servicio
-    let service = EmbeddingService::new(
-        repository,
-        generator,
-        vector_store,
+    // Production setup with SQLite + HNSW + ONNX
+    let repository = Arc::new(SqliteRepository::new("embeddings.db")?);
+    let vector_store = Arc::new(HnswVectorStore::new());
+    let generator = Arc::new(
+        OnnxEmbeddingGenerator::new("all-MiniLM-L6-v2", None).await?
     );
 
-    // Crear embedding
-    let embedding = service.create_from_text("Rust programming").await?;
-    println!("Created embedding: {}", embedding.id());
+    let service = EmbeddingService::new(generator, repository, vector_store);
 
-    // Buscar similares
-    let params = SearchParams::builder().k(5).build();
-    let results = service
-        .search_similar_text("programming languages", params)
-        .await?;
+    // Create embeddings
+    let embedding = service.create_embedding("Rust programming language").await?;
+    println!("Created: {}", embedding.id());
+
+    // Search similar
+    let results = service.find_similar(
+        "systems programming",
+        SearchParams::builder().k(5).build(),
+    ).await?;
 
     for result in results {
-        println!("Similarity: {:.4}", result.score);
+        println!("Score: {:.4}", result.score);
     }
 
     Ok(())
 }
 ```
 
-## 📚 Ejemplos
+## Examples
 
-Ejecuta los ejemplos incluidos:
+The library includes 5 production-ready examples:
 
 ```bash
-# Ejemplo básico de uso
-cargo run --example basic_usage
-
-# Implementación personalizada
-cargo run --example custom_storage
-
-# Memoria y concurrencia (Stack, Heap, Static, Threads, Rayon)
+# Memory patterns and concurrency (Stack, Heap, Static, Threads, Rayon)
 cargo run --example memory_and_concurrency
+
+# SQLite + HNSW persistent storage
+cargo run --example sqlite_persistent --release
+
+# HNSW ANN search benchmark (1K, 10K, 100K vectors)
+cargo run --example ann_hnsw --release
+
+# Log analysis with semantic search
+cargo run --example log_analysis --release
+
+# ONNX batch vs server mode benchmark
+cargo run --example benchmark_pool --release
 ```
 
-## 🧠 Gestión de Memoria y Concurrencia
+### Example: Log Analysis
 
-Esta biblioteca demuestra explícitamente los conceptos de memoria de Rust y patrones de concurrencia:
-
-### Tipos de Memoria
-
-#### 1. **Static Memory** (Segmento de datos)
-Constantes compiladas en el binario:
 ```rust
-pub const DEFAULT_EMBEDDING_DIMENSIONS: usize = 384;
-pub const MAX_BATCH_SIZE: usize = 1000;
-```
-- **Ubicación**: Binario (`.data` / `.rodata`)
-- **Lifetime**: `'static` (toda la duración del programa)
-- **Costo**: Zero-cost (compile time)
+use rust_embeddings::application::LogAnalyzer;
+use rust_embeddings::domain::{LogEntry, LogLevel, TimeWindow};
 
-#### 2. **Stack Memory** (Pila)
-Variables locales y parámetros:
-```rust
-let dimensions: usize = 128;  // Stack: 8 bytes
-let threshold: f32 = 0.85;     // Stack: 4 bytes
-```
-- **Ubicación**: Stack de cada thread (~2MB en Linux)
-- **Velocidad**: Muy rápida (mover puntero de pila)
-- **Limitación**: Tamaño fijo, stack overflow si se excede
+// Create log analyzer
+let analyzer = LogAnalyzer::new(generator, repository, vector_store);
 
-#### 3. **Heap Memory** (Montículo)
-Datos dinámicos:
-```rust
-let embeddings = Vec::new();           // Heap allocation
-let shared = Arc::new(data);           // Heap + ref counting
-let cached = HashMap::new();           // Heap allocation
-```
-- **Ubicación**: Heap del proceso (puede crecer a GBs)
-- **Flexibilidad**: Tamaño dinámico en runtime
-- **Costo**: Allocación más lenta que stack
+// Index logs
+let log = LogEntry::builder()
+    .message("Database connection timeout")
+    .level(LogLevel::Error)
+    .source("api-server")
+    .build();
 
-### Patrones de Concurrencia
+analyzer.index_log(&log).await?;
 
-#### 1. **Thread-based Parallelism** (src/concurrency.rs:62)
-Threads explícitos del OS:
-```rust
-let shared_data = Arc::new(embeddings);  // Heap compartido
-thread::spawn(move || {
-    // Cada thread tiene su propio stack
-    process_data(&shared_data)
-});
+// Semantic search
+let results = analyzer.search_logs("connection problems", 10, None).await?;
+
+// Find errors in last hour
+let errors = analyzer.find_errors(TimeWindow::last_hours(1), 10).await?;
+
+// Detect anomalies
+let anomalies = analyzer.detect_anomalies(TimeWindow::last_hours(1), 5).await?;
 ```
 
-#### 2. **Channel Communication** (src/concurrency.rs:125)
-Message passing entre threads:
+## Infrastructure Components
+
+### ONNX Embedding Generator
+
+Local inference with Hugging Face models:
+
 ```rust
-let (sender, receiver) = channel::bounded(100);
-thread::spawn(move || {
-    while let Ok(msg) = receiver.recv() {
-        process(msg);  // Ownership transferido
-    }
-});
+// Batch mode (optimal for CLI/batch jobs)
+let generator = OnnxEmbeddingGenerator::new("all-MiniLM-L6-v2", None).await?;
+
+// Server mode (optimal for API servers)
+let generator = OnnxEmbeddingGenerator::with_mode(
+    "all-MiniLM-L6-v2",
+    None,
+    ExecutionMode::Server,
+).await?;
+
+let embedding = generator.generate_from_text("Hello world").await?;
 ```
 
-#### 3. **Data Parallelism con Rayon** (src/concurrency.rs:217)
-Paralelización automática:
+### SQLite Repository
+
+ACID-compliant persistent storage:
+
 ```rust
-embeddings.par_iter()
-    .map(|e| process(e))
-    .collect()  // Work-stealing thread pool
+// File-based
+let repo = SqliteRepository::new("embeddings.db")?;
+
+// In-memory (for testing)
+let repo = SqliteRepository::in_memory()?;
+
+repo.save(&embedding).await?;
+let found = repo.find_by_id(embedding.id()).await?;
 ```
 
-#### 4. **RwLock** (src/infrastructure/repository.rs:14)
-Múltiples lectores O un escritor:
-```rust
-storage: RwLock<HashMap<K, V>>  // Thread-safe
+### HNSW Vector Store
 
-let data = storage.read().unwrap();   // Multiple readers
-let mut data = storage.write().unwrap(); // Single writer
+Fast approximate nearest neighbor search:
+
+```rust
+let config = HnswConfig {
+    m: 16,                  // Connections per node
+    ef_construction: 200,   // Build quality
+    ef_search: 100,         // Search quality
+};
+
+let store = HnswVectorStore::with_config(config);
+store.index(&embedding).await?;
+
+let results = store.search(
+    &query_vector,
+    SearchParams::builder().k(10).build(),
+).await?;
 ```
 
-#### 5. **Async/Await** (src/application/services.rs)
-Concurrencia para I/O:
+## Design Patterns
+
+### Repository Pattern
 ```rust
-async fn create(&self, text: &str) -> Result<Embedding> {
-    let emb = self.generator.generate(text).await?;
-    self.repository.save(&emb).await?;
-    Ok(emb)
+#[async_trait]
+pub trait EmbeddingRepository: Send + Sync {
+    async fn save(&self, embedding: &Embedding) -> Result<()>;
+    async fn find_by_id(&self, id: &str) -> Result<Option<Embedding>>;
+    async fn list(&self) -> Result<Vec<Embedding>>;
+    async fn delete(&self, id: &str) -> Result<()>;
 }
 ```
 
-### Documentación Detallada
+### Strategy Pattern
+```rust
+#[async_trait]
+pub trait EmbeddingGenerator: Send + Sync {
+    async fn generate_from_text(&self, text: &str) -> Result<Embedding>;
+    async fn generate_batch(&self, texts: &[String]) -> Result<Vec<Embedding>>;
+    fn model_name(&self) -> &str;
+    fn dimensions(&self) -> usize;
+}
+```
 
-Para una explicación completa de los patrones de memoria y concurrencia, ver:
-- **[MEMORY_AND_CONCURRENCY.md](MEMORY_AND_CONCURRENCY.md)**: Guía detallada
-- **[src/concurrency.rs](src/concurrency.rs)**: Implementaciones comentadas
-- **[src/config.rs](src/config.rs)**: Ejemplos de static memory
-- **Ejemplo**: `cargo run --example memory_and_concurrency`
+### Builder Pattern
+```rust
+let metadata = EmbeddingMetadata::builder()
+    .source("document.txt")
+    .model("all-MiniLM-L6-v2")
+    .tag("production")
+    .property("version", "1.0")
+    .build()?;
+```
 
-## 🧪 Testing
+## Memory and Concurrency
 
-Ejecuta los tests:
+### Memory Types
+
+| Type | Location | Example |
+|------|----------|---------|
+| **Static** | Binary data segment | `const DEFAULT_DIMENSIONS: usize = 384;` |
+| **Stack** | Thread stack (~2MB) | `let threshold: f32 = 0.85;` |
+| **Heap** | Dynamic allocation | `Vec::new()`, `Arc::new()` |
+
+### Concurrency Patterns
+
+```rust
+// Thread-based parallelism
+let shared = Arc::new(data);
+thread::spawn(move || process(&shared));
+
+// Channel communication
+let (tx, rx) = channel::bounded(100);
+tx.send(message)?;
+
+// Data parallelism with Rayon
+embeddings.par_iter().map(|e| process(e)).collect();
+
+// Async/Await
+let result = service.create_embedding(text).await?;
+```
+
+## Testing
 
 ```bash
-# Todos los tests
+# Run all tests
 cargo test
 
-# Tests con output
+# Run with output
 cargo test -- --nocapture
 
-# Tests específicos
-cargo test domain::
+# Run specific module tests
+cargo test infrastructure::hnsw
 ```
 
-## 🔧 Configuración
+## Feature Flags
 
-La biblioteca soporta configuración mediante archivos JSON o variables de entorno:
-
-```rust
-// Desde archivo
-let config = AppConfig::from_file("config.json")?;
-
-// Desde variables de entorno
-let config = AppConfig::from_env()?;
-
-// Validar configuración
-config.validate()?;
+```toml
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = ["sqlx"]
+server = ["axum", "tower", "tower-http", "prometheus"]
+full = ["sqlite", "postgres", "server"]
 ```
 
-### Variables de Entorno
+## Performance
 
-- `EMBEDDINGS_STORAGE_TYPE`: Tipo de almacenamiento (memory, file, database)
-- `EMBEDDINGS_DEFAULT_MODEL`: Modelo por defecto
-- `EMBEDDINGS_DIMENSIONS`: Dimensiones de embeddings
-- `EMBEDDINGS_API_KEY`: API key si es necesario
-- `EMBEDDINGS_LOG_LEVEL`: Nivel de logging (trace, debug, info, warn, error)
+Benchmarks on 12-core CPU:
 
-## 🎯 Principios SOLID
+| Operation | Throughput |
+|-----------|------------|
+| ONNX Embedding Generation | ~100 docs/sec |
+| HNSW Index (10K vectors) | ~300K vectors/sec |
+| HNSW Search (10K vectors) | ~27K QPS |
+| SQLite Save | ~1K embeddings/sec |
 
-### Single Responsibility Principle (SRP)
-Cada módulo tiene una única responsabilidad:
-- `EmbeddingRepository`: Solo persistencia
-- `EmbeddingGenerator`: Solo generación
-- `VectorStore`: Solo búsqueda de similitud
-
-### Open/Closed Principle (OCP)
-Abierto para extensión, cerrado para modificación:
-- Nuevas implementaciones de `EmbeddingGenerator` sin modificar código existente
-- Custom repositories implementando el trait
-
-### Liskov Substitution Principle (LSP)
-Las implementaciones son intercambiables:
-- Cualquier `EmbeddingRepository` funciona con `EmbeddingService`
-- Mock y producción son intercambiables
-
-### Interface Segregation Principle (ISP)
-Interfaces específicas:
-- `EmbeddingRepository` vs `EmbeddingRepositoryExt`
-- Traits enfocados en responsabilidades específicas
-
-### Dependency Inversion Principle (DIP)
-Dependencias en abstracciones, no en implementaciones:
-- `EmbeddingService` depende de traits, no de tipos concretos
-- Inyección de dependencias mediante `Arc<dyn Trait>`
-
-## 🛠️ Extensibilidad
-
-### Crear un Generador Personalizado
-
-```rust
-use async_trait::async_trait;
-
-struct MyCustomGenerator {
-    model: String,
-    dimensions: usize,
-}
-
-#[async_trait]
-impl EmbeddingGenerator for MyCustomGenerator {
-    async fn generate_from_text(&self, text: &str) -> Result<Embedding> {
-        // Tu implementación aquí
-        todo!()
-    }
-
-    fn model_name(&self) -> &str {
-        &self.model
-    }
-
-    fn dimensions(&self) -> usize {
-        self.dimensions
-    }
-}
-```
-
-### Crear un Repository Personalizado
-
-```rust
-struct PostgresRepository {
-    pool: PgPool,
-}
-
-#[async_trait]
-impl EmbeddingRepository for PostgresRepository {
-    async fn save(&self, embedding: &Embedding) -> Result<()> {
-        // Implementación con PostgreSQL
-        todo!()
-    }
-    // ... otros métodos
-}
-```
-
-## 📊 Métricas y Observabilidad
-
-La biblioteca utiliza `tracing` para logging estructurado:
-
-```rust
-use tracing_subscriber;
-
-tracing_subscriber::fmt::init();
-```
-
-Los eventos de dominio permiten auditoría y debugging:
-
-```rust
-let publisher = Arc::new(InMemoryEventPublisher::new());
-let service = EmbeddingService::with_events(
-    repository,
-    generator,
-    vector_store,
-    publisher,
-);
-```
-
-## 🔒 Manejo de Errores
-
-Errores tipados y descriptivos:
+## Error Handling
 
 ```rust
 pub enum EmbeddingError {
@@ -445,53 +307,13 @@ pub enum EmbeddingError {
     StorageError(String),
     GenerationError(String),
     ValidationError(String),
-    // ...
 }
 ```
 
-## 🚀 Roadmap
+## License
 
-- [ ] Integración con OpenAI embeddings
-- [ ] Integración con Hugging Face
-- [ ] Soporte para FAISS
-- [ ] Soporte para PostgreSQL con pgvector
-- [ ] Cache distribuido
-- [ ] Métricas con Prometheus
-- [ ] Persistencia en disco
+MIT License
 
-## 📖 Documentación Completa
+## Author
 
-Genera la documentación completa:
-
-```bash
-cargo doc --open
-```
-
-## 🤝 Contribuir
-
-Las contribuciones son bienvenidas. Por favor:
-
-1. Fork el repositorio
-2. Crea una rama para tu feature
-3. Sigue los principios de clean code
-4. Añade tests
-5. Actualiza la documentación
-6. Envía un Pull Request
-
-## 📝 Licencia
-
-MIT License - ver [LICENSE](LICENSE) para detalles.
-
-## 👥 Autores
-
-- Tu Nombre - [GitHub](https://github.com/tu-usuario)
-
-## 🙏 Agradecimientos
-
-- Inspirado por principios de Clean Architecture (Robert C. Martin)
-- Patrones de Domain-Driven Design (Eric Evans)
-- La comunidad de Rust
-
----
-
-**Nota**: Esta biblioteca es un ejemplo educativo de clean code y patrones de diseño en Rust. Para uso en producción, considera integrar con modelos y bases de datos vectoriales reales.
+- alnroot - [GitHub](https://github.com/alnroot)
