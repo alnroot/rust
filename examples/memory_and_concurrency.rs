@@ -135,7 +135,7 @@ fn demonstrate_stack_heap_memory() {
              text.as_ptr());
 
     // Embedding (mix of stack and heap)
-    let vector = Vector::new(&vector_data).unwrap();
+    let vector = Vector::new(vector_data).unwrap();
     let metadata = EmbeddingMetadata::builder()
         .source("example")
         .model("demo")
@@ -201,7 +201,7 @@ fn demonstrate_shared_memory_concurrency() -> Result<()> {
             // Each thread reads from shared heap data
             let mut sum = 0.0_f32;
             for embedding in embeddings.iter() {
-                for value in embedding.vector().as_slice() {
+                for value in embedding.vector().data() {
                     sum += value;
                 }
             }
@@ -328,7 +328,7 @@ fn create_sample_embeddings(count: usize) -> Result<Vec<Embedding>> {
     (0..count)
         .map(|i| {
             let data: Vec<f32> = (0..128).map(|j| (i + j) as f32 * 0.01).collect();
-            let vector = Vector::new(&data)?;
+            let vector = Vector::new(data)?;
             let metadata = EmbeddingMetadata::builder()
                 .source(format!("sample-{}", i))
                 .model("demo-model")

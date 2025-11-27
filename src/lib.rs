@@ -27,17 +27,23 @@ pub mod error;
 pub mod config;
 pub mod concurrency;
 
+// API module (only available with "server" feature)
+#[cfg(feature = "server")]
+pub mod api;
+
 // Re-export commonly used types
 pub use domain::{Embedding, EmbeddingMetadata, Vector};
 pub use error::{EmbeddingError, Result};
 pub use ports::{EmbeddingRepository, EmbeddingGenerator, VectorStore};
 pub use application::services::EmbeddingService;
 
+#[cfg(feature = "server")]
+pub use api::{ApiServer, CreateEmbeddingRequest, SearchRequest};
+
 /// Prelude module for convenient imports
 pub mod prelude {
     pub use crate::domain::*;
     pub use crate::error::{EmbeddingError, Result};
     pub use crate::ports::*;
-    pub use crate::application::services::*;
-    pub use crate::application::use_cases::*;
+    pub use crate::application::*;
 }

@@ -305,7 +305,7 @@ mod tests {
     use crate::domain::value_objects::EmbeddingMetadata;
 
     fn create_test_embedding(data: &[f32]) -> Embedding {
-        let vector = Vector::new(data).unwrap();
+        let vector = Vector::new(data.to_vec()).unwrap();
         let metadata = EmbeddingMetadata::builder()
             .source("test")
             .model("test-model")

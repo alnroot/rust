@@ -2,10 +2,9 @@
 name = "rust-embeddings"
 version = "0.1.0"
 edition = "2021"
-authors = ["Your Name <your.email@example.com>"]
+authors = ["alnroot"]
 description = "A clean, well-architected Rust library for managing embeddings with design patterns"
 license = "MIT"
-repository = "https://github.com/your-username/rust-embeddings"
 
 [dependencies]
 # Async runtime
@@ -41,23 +40,86 @@ rayon = "1.8"           # Data parallelism
 crossbeam = "0.8"       # Channels and concurrent data structures
 num_cpus = "1.16"       # CPU core detection
 
+# ONNX Runtime for local model inference
+ort = { version = "2.0.0-rc.10", features = ["download-binaries"] }
+
+# HTTP client for downloading models and API calls
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+
+# Tokenizers for text preprocessing
+tokenizers = "0.19"
+
+# System directories (for cache)
+dirs = "5.0"
+
+# === Production Features ===
+
+# Database - SQLite
+rusqlite = { version = "0.32", features = ["bundled", "serde_json", "chrono"] }
+
+# Database - PostgreSQL
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "json"], optional = true }
+
+# HNSW for ANN search
+instant-distance = "0.6"
+
+# HTTP Server
+axum = { version = "0.7", features = ["macros"], optional = true }
+tower = { version = "0.4", features = ["limit"], optional = true }
+tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"], optional = true }
+
+# Metrics
+prometheus = { version = "0.13", optional = true }
+metrics = { version = "0.23", optional = true }
+metrics-exporter-prometheus = { version = "0.15", optional = true }
+
+# Configuration
+toml = "0.8"
+figment = { version = "0.10", features = ["toml", "env"] }
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"], optional = true }
+
 [dev-dependencies]
 mockall = "0.12"
 tokio-test = "0.4"
 proptest = "1.4"
+tempfile = "3.8"
+criterion = "0.5"
+
+[features]
+default = ["sqlite"]
+sqlite = []
+postgres = ["sqlx"]
+server = ["axum", "tower", "tower-http", "prometheus", "metrics", "metrics-exporter-prometheus", "clap"]
+full = ["sqlite", "postgres", "server"]
 
 [lib]
 name = "rust_embeddings"
 path = "src/lib.rs"
 
-[[example]]
-name = "basic_usage"
-path = "examples/basic_usage.rs"
-
-[[example]]
-name = "custom_storage"
-path = "examples/custom_storage.rs"
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+required-features = ["server"]
 
 [[example]]
 name = "memory_and_concurrency"
 path = "examples/memory_and_concurrency.rs"
+
+[[example]]
+name = "log_analysis"
+path = "examples/log_analysis.rs"
+
+[[example]]
+name = "ann_hnsw"
+path = "examples/ann_hnsw.rs"
+
+[[example]]
+name = "sqlite_persistent"
+path = "examples/sqlite_persistent.rs"
+required-features = []
+
+[[example]]
+name = "benchmark_pool"
+path = "examples/benchmark_pool.rs"

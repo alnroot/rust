@@ -96,4 +96,12 @@ impl EmbeddingError {
     pub fn processing(msg: impl Into<String>) -> Self {
         Self::ProcessingError(msg.into())
     }
+
+    /// Create a serialization error from a message
+    pub fn serialization(msg: impl Into<String>) -> Self {
+        Self::SerializationError(serde_json::Error::io(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            msg.into()
+        )))
+    }
 }

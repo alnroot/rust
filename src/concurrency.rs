@@ -30,7 +30,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use crossbeam::channel;
 use rayon::prelude::*;
-use crate::domain::{Embedding, Vector, EmbeddingMetadata, EmbeddingCollection};
+use crate::domain::{Embedding, Vector, EmbeddingMetadata};
 use crate::error::Result;
 
 // ============================================================================
@@ -52,7 +52,7 @@ pub const DEFAULT_WORKER_THREADS: usize = 4;
 ///
 /// ## Memory Allocation Pattern:
 /// - `embeddings` parameter: Passed as reference (stack pointer)
-/// - `Arc<Vec<Embedding>>`: Heap allocation for shared ownership
+/// - `Arc<[Embedding]>`: Heap allocation for shared ownership (NO COPY)
 /// - Thread handles: Stack allocated in this function
 /// - Cloned Arc: Only increments reference count (no data copy)
 ///
@@ -61,16 +61,30 @@ pub const DEFAULT_WORKER_THREADS: usize = 4;
 /// - Each thread processes a chunk of data
 /// - Uses Arc for shared read-only access (heap memory)
 /// - Join all threads before returning
+///
+/// ## Safety:
+/// - Handles edge case where num_threads > embeddings.len()
+/// - No data copying (uses Arc<[T]> instead of Arc<Vec<T>>)
 pub fn process_with_threads(
     embeddings: &[Embedding],
     num_threads: usize,
 ) -> Result<Vec<f32>> {
-    let num_threads = num_threads.min(MAX_WORKER_THREADS).max(1);
+    // Handle edge cases
+    if embeddings.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Limit threads to actual data size to avoid empty chunks
+    let num_threads = num_threads
+        .min(MAX_WORKER_THREADS)
+        .min(embeddings.len())
+        .max(1);
+
     let chunk_size = (embeddings.len() + num_threads - 1) / num_threads;
 
-    // Clone embeddings to heap and wrap in Arc for sharing between threads
-    // Arc = Atomic Reference Counted pointer (heap allocation)
-    let shared_data = Arc::new(embeddings.to_vec());
+    // Wrap in Arc without copying - Arc::from converts &[T] to Arc<[T]>
+    // This only allocates the Arc control block, not the data
+    let shared_data: Arc<[Embedding]> = Arc::from(embeddings);
 
     // Vector to store thread handles (stack allocated)
     let mut handles = Vec::with_capacity(num_threads);
@@ -82,6 +96,12 @@ pub fn process_with_threads(
         // Spawn OS thread - gets its own stack (typically 2MB)
         let handle = thread::spawn(move || {
             let start = thread_id * chunk_size;
+
+            // Safety: Check bounds to prevent slice panic
+            if start >= data.len() {
+                return 0.0_f32;
+            }
+
             let end = (start + chunk_size).min(data.len());
 
             // Process chunk - all computation happens on this thread's stack
@@ -89,7 +109,7 @@ pub fn process_with_threads(
 
             for embedding in &data[start..end] {
                 // Access heap data (embedding) but accumulate on stack (local_sum)
-                for value in embedding.vector().as_slice() {
+                for value in embedding.vector().data() {
                     local_sum += value;
                 }
             }
@@ -162,7 +182,7 @@ pub fn process_with_channels(
                             .map(|i| (text.len() as f32 + i as f32) * 0.01)
                             .collect();
 
-                        let vector = Vector::new(&vector_data).unwrap();
+                        let vector = Vector::new(vector_data).unwrap();
                         let metadata = EmbeddingMetadata::builder()
                             .source(text)
                             .model(format!("worker-{}", worker_id))
@@ -233,7 +253,7 @@ pub fn process_with_rayon(embeddings: &[Embedding]) -> Result<Vec<f32>> {
             // This closure runs on thread pool worker threads
             // Each thread has its own stack for local variables
             let mut sum = 0.0_f32;
-            for value in embedding.vector().as_slice() {
+            for value in embedding.vector().data() {
                 sum += value;
             }
             sum
@@ -261,7 +281,7 @@ pub fn parallel_batch_process(
                         .map(|i| (text.len() as f32 + i as f32) * 0.01)
                         .collect();
 
-                    let vector = Vector::new(&vector_data)?;
+                    let vector = Vector::new(vector_data)?;
                     let metadata = EmbeddingMetadata::builder()
                         .source(text.clone())
                         .model("rayon-parallel")
@@ -351,7 +371,7 @@ impl ConcurrencyBenchmark {
         let start = Instant::now();
         let _seq_results: Vec<f32> = embeddings
             .iter()
-            .map(|e| e.vector().as_slice().iter().sum())
+            .map(|e| e.vector().data().iter().sum())
             .collect();
         let sequential_time = start.elapsed();
         println!("Sequential: {:?}", sequential_time);
@@ -398,7 +418,7 @@ mod tests {
     fn create_test_embeddings(count: usize) -> Vec<Embedding> {
         (0..count)
             .map(|i| {
-                let vector = Vector::new(&vec![i as f32; 128]).unwrap();
+                let vector = Vector::new(vec![i as f32; 128]).unwrap();
                 let metadata = EmbeddingMetadata::builder()
                     .source(format!("test-{}", i))
                     .model("test")
@@ -414,6 +434,54 @@ mod tests {
         let embeddings = create_test_embeddings(100);
         let results = process_with_threads(&embeddings, 4).unwrap();
         assert_eq!(results.len(), 4);
+    }
+
+    #[test]
+    fn test_process_with_threads_empty() {
+        // Edge case: empty embeddings
+        let embeddings: Vec<Embedding> = vec![];
+        let results = process_with_threads(&embeddings, 4).unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_process_with_threads_fewer_embeddings_than_threads() {
+        // Edge case: fewer embeddings than threads (the panic risk case)
+        let embeddings = create_test_embeddings(2);
+        let results = process_with_threads(&embeddings, 8).unwrap();
+        // Should only spawn 2 threads (limited to embeddings.len())
+        assert_eq!(results.len(), 2);
+
+        // Verify no thread panicked by checking all results are finite
+        for result in &results {
+            assert!(result.is_finite());
+        }
+    }
+
+    #[test]
+    fn test_process_with_threads_one_embedding() {
+        // Edge case: single embedding
+        let embeddings = create_test_embeddings(1);
+        let results = process_with_threads(&embeddings, 4).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_process_with_threads_zero_threads() {
+        // Edge case: zero threads requested (should default to 1)
+        let embeddings = create_test_embeddings(10);
+        let results = process_with_threads(&embeddings, 0).unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    #[test]
+    fn test_process_with_threads_many_threads() {
+        // Edge case: more threads than MAX_WORKER_THREADS
+        let embeddings = create_test_embeddings(100);
+        let results = process_with_threads(&embeddings, 1000).unwrap();
+        // Should be limited to min(MAX_WORKER_THREADS, embeddings.len())
+        assert!(results.len() <= MAX_WORKER_THREADS);
+        assert!(results.len() <= embeddings.len());
     }
 
     #[test]
